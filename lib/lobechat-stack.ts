@@ -1,5 +1,6 @@
 import type { StackProps } from "aws-cdk-lib";
 import {
+  Aws,
   aws_apigateway as apigw,
   aws_certificatemanager as acm,
   aws_ec2 as ec2,
@@ -15,10 +16,13 @@ import {
   custom_resources as cr,
   CustomResource,
   Duration,
+  Fn,
   RemovalPolicy,
   Stack,
 } from "aws-cdk-lib";
 import type { Construct } from "constructs";
+
+const productionStage = "prod";
 
 interface Props extends StackProps {
   stage: string;
@@ -69,7 +73,7 @@ export class LobeChatStack extends Stack {
 
     // VPC - single AZ, NAT instance for egress, separate subnets
     const vpc = new ec2.Vpc(this, "Vpc", {
-      maxAzs: 1,
+      maxAzs: 2, // Aurora requires at least 2 subnets in different AZs
       natGatewayProvider: ec2.NatProvider.instanceV2({
         instanceType: new ec2.InstanceType("t3.nano"),
       }),
@@ -107,7 +111,9 @@ export class LobeChatStack extends Stack {
       serverlessV2MaxCapacity: 1,
       deletionProtection: false,
       removalPolicy:
-        stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+        stage === productionStage
+          ? RemovalPolicy.RETAIN
+          : RemovalPolicy.DESTROY,
       cloudwatchLogsExports: ["postgresql"],
       cloudwatchLogsRetention: logs.RetentionDays.ONE_MONTH,
     });
@@ -120,7 +126,9 @@ export class LobeChatStack extends Stack {
       {
         description: "LobeChat DATABASE_URL",
         removalPolicy:
-          stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+          stage === productionStage
+            ? RemovalPolicy.RETAIN
+            : RemovalPolicy.DESTROY,
       },
     );
 
@@ -144,7 +152,9 @@ export class LobeChatStack extends Stack {
     const dbInitFnLogGroup = new logs.LogGroup(this, "PgvectorInitFnLogGroup", {
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy:
-        stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+        stage === productionStage
+          ? RemovalPolicy.RETAIN
+          : RemovalPolicy.DESTROY,
     });
 
     // Custom Resource to enable pgvector extension in the DB
@@ -226,7 +236,7 @@ export class LobeChatStack extends Stack {
       handler: appFn,
       proxy: true,
       deployOptions: {
-        stageName: "prod",
+        stageName: props.stage,
       },
       domainName:
         domainName && certificate
@@ -247,10 +257,37 @@ export class LobeChatStack extends Stack {
         ),
       });
     }
-    const appUrl = domainName ? `https://${domainName}` : restApi.url;
-    const nextAuthUrl = `${appUrl}api/auth`;
-    appFn.addEnvironment("APP_URL", appUrl);
-    appFn.addEnvironment("NEXTAUTH_URL", nextAuthUrl);
+    // Avoid referencing the Stage resource in Lambda env (prevents CFN dependency cycle).
+    // Keep this literal in sync with deployOptions.stageName above.
+    const apiStageName = props.stage;
+    const appUrl = domainName
+      ? `https://${domainName}`
+      : Fn.join("", [
+          "https://",
+          restApi.restApiId, // safe: RestApiId does not create a cycle
+          ".execute-api.",
+          Aws.REGION,
+          ".",
+          Aws.URL_SUFFIX,
+          "/",
+          apiStageName,
+          "/",
+        ]);
+    const nextAuthUrl = domainName
+      ? `https://${domainName}/api/auth`
+      : Fn.join("", [
+          "https://",
+          restApi.restApiId,
+          ".execute-api.",
+          Aws.REGION,
+          ".",
+          Aws.URL_SUFFIX,
+          "/",
+          apiStageName,
+          "/api/auth",
+        ]);
+    appFn.addEnvironment("APP_URL", appUrl as unknown as string);
+    appFn.addEnvironment("NEXTAUTH_URL", nextAuthUrl as unknown as string);
 
     // Ensure DATABASE_URL is prepared before App Lambda finalizes
     appFn.node.addDependency(dbInit);
