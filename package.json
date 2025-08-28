@@ -42,5 +42,8 @@
     "@aws-sdk/client-secrets-manager": "^3.637.0",
     "pg": "^8.12.0",
     "source-map-support": "^0.5.21"
+  },
+  "prettier": {
+    "singleQuote": true
   }
 }

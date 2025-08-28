@@ -1,4 +1,4 @@
-import type { StackProps } from "aws-cdk-lib";
+import type { StackProps } from 'aws-cdk-lib';
 import {
   Aws,
   aws_apigateway as apigw,
@@ -19,10 +19,10 @@ import {
   Fn,
   RemovalPolicy,
   Stack,
-} from "aws-cdk-lib";
-import type { Construct } from "constructs";
+} from 'aws-cdk-lib';
+import type { Construct } from 'constructs';
 
-const productionStage = "prod";
+const productionStage = 'prod';
 
 interface Props extends StackProps {
   stage: string;
@@ -34,13 +34,13 @@ export class LobeChatStack extends Stack {
 
     // Apply permissions boundary to all IAM Roles in this stack
     const permissionsBoundaryName: string =
-      (this.node.tryGetContext("permissionsBoundaryName") as
+      (this.node.tryGetContext('permissionsBoundaryName') as
         | string
-        | undefined) ?? "cdk-permission-boundary";
+        | undefined) ?? 'cdk-permission-boundary';
 
     const permissionsBoundary = iam.ManagedPolicy.fromManagedPolicyName(
       this,
-      "CdkPermissionsBoundary",
+      'CdkPermissionsBoundary',
       permissionsBoundaryName,
     );
     iam.PermissionsBoundary.of(this).apply(permissionsBoundary);
@@ -48,23 +48,23 @@ export class LobeChatStack extends Stack {
     const stage = props.stage;
 
     // Context / parameters
-    const dbName = this.node.tryGetContext("lobechat:dbName") ?? "lobechat";
+    const dbName = this.node.tryGetContext('lobechat:dbName') ?? 'lobechat';
     const nextAuthSsoProviders =
-      this.node.tryGetContext("lobechat:nextAuthSsoProviders") ?? "";
+      this.node.tryGetContext('lobechat:nextAuthSsoProviders') ?? '';
     const rootDomain: string | undefined = this.node.tryGetContext(
-      "lobechat:rootDomain",
+      'lobechat:rootDomain',
     );
     const subdomain: string =
-      this.node.tryGetContext("lobechat:subdomain") ?? "lobechat";
+      this.node.tryGetContext('lobechat:subdomain') ?? 'lobechat';
     const domainName = rootDomain ? `${subdomain}.${rootDomain}` : undefined;
     const hostedZone = rootDomain
-      ? route53.HostedZone.fromLookup(this, "HostedZone", {
+      ? route53.HostedZone.fromLookup(this, 'HostedZone', {
           domainName: rootDomain,
         })
       : undefined;
     const certificate =
       domainName && hostedZone
-        ? new acm.DnsValidatedCertificate(this, "ApiCertificate", {
+        ? new acm.DnsValidatedCertificate(this, 'ApiCertificate', {
             domainName,
             hostedZone,
             region: Stack.of(this).region,
@@ -72,31 +72,31 @@ export class LobeChatStack extends Stack {
         : undefined;
 
     // VPC - single AZ, NAT instance for egress, separate subnets
-    const vpc = new ec2.Vpc(this, "Vpc", {
+    const vpc = new ec2.Vpc(this, 'Vpc', {
       maxAzs: 2, // Aurora requires at least 2 subnets in different AZs
       natGatewayProvider: ec2.NatProvider.instanceV2({
-        instanceType: new ec2.InstanceType("t3.nano"),
+        instanceType: new ec2.InstanceType('t3.nano'),
       }),
       natGateways: 1,
       subnetConfiguration: [
-        { name: "public", subnetType: ec2.SubnetType.PUBLIC },
+        { name: 'public', subnetType: ec2.SubnetType.PUBLIC },
         {
-          name: "private-egress",
+          name: 'private-egress',
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
-        { name: "private-db", subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+        { name: 'private-db', subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       ],
     });
 
     // Security groups
-    const dbSg = new ec2.SecurityGroup(this, "DbSg", {
+    const dbSg = new ec2.SecurityGroup(this, 'DbSg', {
       vpc,
-      description: "RDS Postgres security group",
+      description: 'RDS Postgres security group',
       allowAllOutbound: true,
     });
 
     // Aurora Serverless v2 for PostgreSQL (pgvector-capable version)
-    const db = new rds.DatabaseCluster(this, "Postgres", {
+    const db = new rds.DatabaseCluster(this, 'Postgres', {
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroups: [dbSg],
@@ -105,8 +105,8 @@ export class LobeChatStack extends Stack {
         version: rds.AuroraPostgresEngineVersion.VER_15_4,
       }),
       defaultDatabaseName: dbName,
-      credentials: rds.Credentials.fromGeneratedSecret("postgres"),
-      writer: rds.ClusterInstance.serverlessV2("Writer"), // readers: [rds.ClusterInstance.serverlessV2("Reader")], // optional
+      credentials: rds.Credentials.fromGeneratedSecret('postgres'),
+      writer: rds.ClusterInstance.serverlessV2('Writer'), // readers: [rds.ClusterInstance.serverlessV2("Reader")], // optional
       serverlessV2MinCapacity: 0.5,
       serverlessV2MaxCapacity: 1,
       deletionProtection: false,
@@ -114,7 +114,7 @@ export class LobeChatStack extends Stack {
         stage === productionStage
           ? RemovalPolicy.RETAIN
           : RemovalPolicy.DESTROY,
-      cloudwatchLogsExports: ["postgresql"],
+      cloudwatchLogsExports: ['postgresql'],
       cloudwatchLogsRetention: logs.RetentionDays.ONE_MONTH,
     });
 
@@ -122,9 +122,9 @@ export class LobeChatStack extends Stack {
     // Create an empty DATABASE_URL secret; it will be populated by the init Lambda
     const databaseUrlSecret = new secretsmanager.Secret(
       this,
-      "DatabaseUrlSecret",
+      'DatabaseUrlSecret',
       {
-        description: "LobeChat DATABASE_URL",
+        description: 'LobeChat DATABASE_URL',
         removalPolicy:
           stage === productionStage
             ? RemovalPolicy.RETAIN
@@ -133,23 +133,23 @@ export class LobeChatStack extends Stack {
     );
 
     // Secrets for LobeChat
-    const keyVaultsSecret = new secretsmanager.Secret(this, "KeyVaultsSecret", {
-      description: "LobeChat KEY_VAULTS_SECRET",
+    const keyVaultsSecret = new secretsmanager.Secret(this, 'KeyVaultsSecret', {
+      description: 'LobeChat KEY_VAULTS_SECRET',
     });
 
-    const nextAuthSecret = new secretsmanager.Secret(this, "NextAuthSecret", {
-      description: "LobeChat NEXT_AUTH_SECRET",
+    const nextAuthSecret = new secretsmanager.Secret(this, 'NextAuthSecret', {
+      description: 'LobeChat NEXT_AUTH_SECRET',
     });
 
     // Security group for the init Lambda
-    const dbInitFnSg = new ec2.SecurityGroup(this, "DbInitFnSg", {
+    const dbInitFnSg = new ec2.SecurityGroup(this, 'DbInitFnSg', {
       vpc,
-      description: "Lambda SG for DB init",
+      description: 'Lambda SG for DB init',
       allowAllOutbound: true,
     });
 
     // Dedicated LogGroup for the init Lambda
-    const dbInitFnLogGroup = new logs.LogGroup(this, "PgvectorInitFnLogGroup", {
+    const dbInitFnLogGroup = new logs.LogGroup(this, 'PgvectorInitFnLogGroup', {
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy:
         stage === productionStage
@@ -158,15 +158,15 @@ export class LobeChatStack extends Stack {
     });
 
     // Custom Resource to enable pgvector extension in the DB
-    const dbInitFn = new lambdaNode.NodejsFunction(this, "PgvectorInitFn", {
-      entry: "lambda/db-init.ts",
-      handler: "handler",
+    const dbInitFn = new lambdaNode.NodejsFunction(this, 'PgvectorInitFn', {
+      entry: 'lambda/db-init.ts',
+      handler: 'handler',
       runtime: lambda.Runtime.NODEJS_20_X,
       timeout: Duration.minutes(2),
       memorySize: 256,
       bundling: {
         externalModules: [], // bundle everything including pg and aws-sdk-v3 clients
-        target: "node20",
+        target: 'node20',
       },
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
@@ -187,15 +187,15 @@ export class LobeChatStack extends Stack {
     db.connections.allowFrom(
       dbInitFn,
       ec2.Port.tcp(5432),
-      "Allow Lambda to connect to Postgres",
+      'Allow Lambda to connect to Postgres',
     );
 
-    const dbInitProvider = new cr.Provider(this, "PgvectorProvider", {
+    const dbInitProvider = new cr.Provider(this, 'PgvectorProvider', {
       onEventHandler: dbInitFn,
     });
 
     // Tie CR lifecycle to DB instance changes
-    const dbInit = new CustomResource(this, "PgvectorInit", {
+    const dbInit = new CustomResource(this, 'PgvectorInit', {
       serviceToken: dbInitProvider.serviceToken,
       properties: {
         DbEndpoint: db.clusterEndpoint.socketAddress,
@@ -206,19 +206,19 @@ export class LobeChatStack extends Stack {
     dbInit.node.addDependency(db);
 
     // App Lambda (placeholder) in VPC
-    const appFn = new lambdaNode.NodejsFunction(this, "AppFn", {
-      entry: "lambda/app-handler.ts",
-      handler: "handler",
+    const appFn = new lambdaNode.NodejsFunction(this, 'AppFn', {
+      entry: 'lambda/app-handler.ts',
+      handler: 'handler',
       runtime: lambda.Runtime.NODEJS_20_X,
       timeout: Duration.seconds(29),
       memorySize: 512,
-      bundling: { target: "node20" },
+      bundling: { target: 'node20' },
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [dbInitFnSg],
       environment: {
         // DATABASE_URL injected at deploy-time from Custom Resource output (no runtime Secrets Manager call)
-        DATABASE_URL: dbInit.getAttString("DatabaseUrl"),
+        DATABASE_URL: dbInit.getAttString('DatabaseUrl'),
         NEXT_AUTH_SSO_PROVIDERS: nextAuthSsoProviders, // The following are placeholders if/when the app reads them
         KEY_VAULTS_SECRET_ARN: keyVaultsSecret.secretArn,
         NEXT_AUTH_SECRET_ARN: nextAuthSecret.secretArn,
@@ -228,11 +228,11 @@ export class LobeChatStack extends Stack {
     db.connections.allowFrom(
       appFn,
       ec2.Port.tcp(5432),
-      "App Lambda to Postgres",
+      'App Lambda to Postgres',
     );
 
     // API Gateway fronting the Lambda (optional custom domain)
-    const restApi = new apigw.LambdaRestApi(this, "LobeChatApi", {
+    const restApi = new apigw.LambdaRestApi(this, 'LobeChatApi', {
       handler: appFn,
       proxy: true,
       deployOptions: {
@@ -249,7 +249,7 @@ export class LobeChatStack extends Stack {
           : undefined,
     });
     if (domainName && hostedZone) {
-      new route53.ARecord(this, "ApiAliasRecord", {
+      new route53.ARecord(this, 'ApiAliasRecord', {
         zone: hostedZone,
         recordName: subdomain,
         target: route53.RecordTarget.fromAlias(
@@ -262,57 +262,57 @@ export class LobeChatStack extends Stack {
     const apiStageName = props.stage;
     const appUrl = domainName
       ? `https://${domainName}`
-      : Fn.join("", [
-          "https://",
+      : Fn.join('', [
+          'https://',
           restApi.restApiId, // safe: RestApiId does not create a cycle
-          ".execute-api.",
+          '.execute-api.',
           Aws.REGION,
-          ".",
+          '.',
           Aws.URL_SUFFIX,
-          "/",
+          '/',
           apiStageName,
-          "/",
+          '/',
         ]);
     const nextAuthUrl = domainName
       ? `https://${domainName}/api/auth`
-      : Fn.join("", [
-          "https://",
+      : Fn.join('', [
+          'https://',
           restApi.restApiId,
-          ".execute-api.",
+          '.execute-api.',
           Aws.REGION,
-          ".",
+          '.',
           Aws.URL_SUFFIX,
-          "/",
+          '/',
           apiStageName,
-          "/api/auth",
+          '/api/auth',
         ]);
-    appFn.addEnvironment("APP_URL", appUrl as unknown as string);
-    appFn.addEnvironment("NEXTAUTH_URL", nextAuthUrl as unknown as string);
+    appFn.addEnvironment('APP_URL', appUrl as unknown as string);
+    appFn.addEnvironment('NEXTAUTH_URL', nextAuthUrl as unknown as string);
 
     // Ensure DATABASE_URL is prepared before App Lambda finalizes
     appFn.node.addDependency(dbInit);
 
     // Outputs
-    new CfnOutput(this, "LobeChatUrl", {
+    new CfnOutput(this, 'LobeChatUrl', {
       value: appUrl,
-      description: "LobeChat URL",
+      description: 'LobeChat URL',
     });
-    new CfnOutput(this, "DatabaseEndpoint", {
+    new CfnOutput(this, 'DatabaseEndpoint', {
       value: db.clusterEndpoint.socketAddress,
-      description: "RDS endpoint",
+      description: 'RDS endpoint',
     });
-    new CfnOutput(this, "DatabaseSecretArn", {
+    new CfnOutput(this, 'DatabaseSecretArn', {
       value: dbSecret.secretArn,
-      description: "RDS credentials secret ARN",
+      description: 'RDS credentials secret ARN',
     });
-    new CfnOutput(this, "DatabaseUrlSecretArn", {
+    new CfnOutput(this, 'DatabaseUrlSecretArn', {
       value: databaseUrlSecret.secretArn,
-      description: "DATABASE_URL secret ARN",
+      description: 'DATABASE_URL secret ARN',
     });
-    new CfnOutput(this, "NextAuthSecretArn", {
+    new CfnOutput(this, 'NextAuthSecretArn', {
       value: nextAuthSecret.secretArn,
     });
-    new CfnOutput(this, "KeyVaultsSecretArn", {
+    new CfnOutput(this, 'KeyVaultsSecretArn', {
       value: keyVaultsSecret.secretArn,
     });
   }
