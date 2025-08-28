@@ -31,6 +31,9 @@ export default [
             'import/resolver': { typescript: true },
         },
         rules: {
+            'max-len': ['error', {
+                code: 132,
+            }],
             // TS-aware unused vars
             'no-unused-vars': 'off',
             '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
